@@ -1,0 +1,31 @@
+{
+  "name": "mbot",
+  "version": "1.0.0",
+  "description": "crypto bot",
+  "main": "index.js",
+  "dependencies": {
+    "async": "^2.6.0",
+    "binance": "^1.2.2",
+    "bluebird": "^3.5.1",
+    "ccxt": "^1.10.634",
+    "debug": "^3.1.0",
+    "exponential-moving-average": "^1.0.0",
+    "knex": "^0.14.2",
+    "lodash": "^4.17.4",
+    "moving-averages": "^4.0.5",
+    "node-telegram-bot-api": "^0.30.0",
+    "postgres-js": "^0.1.0",
+    "sqlite3": "^3.1.13",
+    "technicalindicators": "^1.0.21",
+    "trend": "^0.3.0",
+    "websocket": "^1.0.25"
+  },
+  "devDependencies": {
+    "talib": "^1.0.3"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Max",
+  "license": "ISC"
+}
