@@ -1,10 +1,17 @@
 'use strict';
-const {init: feed_init, start: feed_start} = require('./feed');
+const feed = require('./feed');
 
 (async function () {
     try {
-        const binance = await feed_init({exchange_id: 'binance'});
-        await  feed_start({exchange: binance, limit: null})
+        const binance = await feed.init({exchange_id: 'binance'});
+        await  feed.start({
+            exchange: binance, limit: null, continuousFeed: false, timeframe: '1m',
+            onSave: async (err, {data, exchange, symbol, timeframe}) => {
+                const buyAt= await trader.checkBuy({data, exchange, symbol, okAt: '5%', stopLossAt: '-1%', trailingStopLossAt: '2%'})
+
+            }
+        })
+
 
     } catch (ex) {
         debugger

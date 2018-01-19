@@ -1,8 +1,11 @@
 const debug = require('debug')('Feed');
 
+const Promise = require('bluebird');
+const _ = require('lodash');
 const ccxt = require('ccxt');
 const async = require('async');
 const db = require('../database/db');
+const ONE_SECOND = 1000 * 1;
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -19,53 +22,85 @@ const feed = async ({exchange, timeframe, symbol, since, limit} = {}) =>
             volume: d[5],
         }));
 
-const queue = async.queue(async function ({exchange, timeframe, symbol, since, limit}) {
+const feedQueue = async.queue(async function ({exchange, timeframe, symbol, since, limit = 500, continuousFeed, onSave}) {
     debug(`feeding ${exchange.id}->${symbol}->${timeframe}${since ? ' since ' + new Date(since) : ''}`)
+    const verifiedSince = verifySince({timeframe, since, limit});
+    let data = await  feed({exchange, timeframe, symbol, since: verifiedSince, limit});
 
-    const data = await  feed({exchange, timeframe, symbol, since: since + 1, limit});
+    debug(`Ok ${data.length} klines fed  ${exchange.id}->${symbol}->${timeframe}  since  ${new Date(verifiedSince)}`)
 
-    debug(`Ok ${data.length} klines fed  ${exchange.id}->${symbol}->${timeframe}${since ? ' since ' + new Date(since) : ''}`)
+    let lastTime = data[data.length - 1].timestamp;
+    if (new Date() - lastTime > getFrame(timeframe) + ONE_SECOND * 50) {
+        debugger;
+        debug('bad data');
+        db.del({exchange: exchange.id, symbol, timeframe});
+        data = await  feed({exchange, timeframe, symbol, limit});
+    }
+    await Promise.all([
+        db.save({data, exchange: exchange.id, symbol, timeframe, onSave}),
+        db.del({exchange: exchange.id, symbol, timeframe, timestamp: oldestSince({timeframe, limit})}),
+        sleep(exchange.rateLimit)
+    ]);
 
-    since = data[data.length - 1].timestamp;
-    db.save({data, exchange: exchange.id, symbol, timeframe})
-    await sleep(exchange.rateLimit);
-
-    setTimeout(() => queue.push({exchange, timeframe, symbol, since}), getNextTime({timeframe, since}))
+    continuousFeed && setTimeout(() =>
+        feedQueue.push({exchange, timeframe, symbol, since: lastTime}), getNextTime({timeframe, since: lastTime})
+    )
 });
 
 
-async function init({exchange_id}) {
+async function init({exchangeId}) {
     let exchange;
-    if (exchange_id in ccxt) {
-        exchange = new ccxt[exchange_id]();
+    if (exchangeId in ccxt) {
+        exchange = new ccxt[exchangeId]();
         if (!exchange.hasFetchOHLCV)
-            throw  `${exchange_id } does not have OHLCV data`
+            throw  `${exchangeId } does not have OHLCV data`
     } else
-        throw   `Exchange not found  ${exchange_id}`;
-    debug('Feed initialized for ' + exchange_id);
+        throw   `Exchange not found  ${exchangeId}`;
+    debug('Feed initialized for ' + exchangeId);
     await exchange.loadMarkets();
     return exchange;
 }
 
-async function start({exchange, limit}) {
+async function start({exchange, limit, timeframe, symbol, continuousFeed = true, onSave}) {
     //await db.clearAll()
     debug('Starting Feeding : ' + exchange.id)
 
-    const lastTimestamp = await  db.getLastTimestamp({exchange: exchange.id});
-    Object.keys(exchange.markets).forEach((symbol) => {
-        Object.keys(exchange.timeframes).forEach(async (timeframe) => {
+    const lastTimestamp = await  db.getLastTimestamp({exchangeId: exchange.id, timeframe});
 
-            const latest = lastTimestamp.filter(d => d.exchange === exchange.id && d.symbol === symbol && d.timeframe === timeframe)[0];
+    const symbolFeedOptions = Object.keys(exchange.markets).map(marketSymbol => {
+        if (symbol && marketSymbol !== symbol) return;
+
+        return Object.keys(exchange.timeframes).map(exchangeTimeframe => {
+            if (timeframe && exchangeTimeframe !== timeframe) return;
+            const latest = lastTimestamp.filter(d => d.exchange === exchange.id && d.symbol === marketSymbol && d.timeframe === exchangeTimeframe)[0];
             const since = latest && latest.timestamp;
+            return {
+                exchange,
+                timeframe: exchangeTimeframe,
+                symbol: marketSymbol,
+                since,
+                limit,
+                continuousFeed,
+                onSave
+            }
+        });
+    });
 
-            queue.push({exchange, timeframe, symbol, since, limit});
-        })
-    })
+    return Promise.map(_.compact(_.flatten(symbolFeedOptions)), (feedOptions) => {
+        return new Promise((resolve, reject) =>
+            feedQueue.push(feedOptions, (err, res) => {
+                // err && reject(err);
+                // !err && resolve(res)
+                err && debug(err)
+                resolve()
+            }))
+    }, {concurrency: 1});
+
 }
 
 
-function getNextTime({timeframe, since}) {
-    let frame, epsi = 1000;
+function getFrame(timeframe) {
+    let frame;
     switch (timeframe) {
         case '1m':
         case '3m':
@@ -92,7 +127,23 @@ function getNextTime({timeframe, since}) {
             frame = 1000 * 60 * 60 * 24 * 31 * parseInt(timeframe)
             break;
     }
+    return frame;
+}
+
+function getNextTime({timeframe, since}) {
+    let epsi = 1000;
+    let frame = getFrame(timeframe);
     return ((since + frame) - (new Date())) + epsi
+}
+
+function verifySince({timeframe, since, limit = 500}) {
+    let vSince = oldestSince({timeframe, limit});
+    return Math.max(since, vSince);
+}
+
+function oldestSince({timeframe, limit = 500}) {
+    return new Date() - getFrame(timeframe) * (limit || 500);
+
 }
 
 module.exports = {start, init}
