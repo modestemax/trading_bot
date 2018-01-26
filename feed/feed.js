@@ -37,14 +37,15 @@ const feedQueue = async.queue(async function ({exchange, timeframe, symbol, sinc
         data = await  feed({exchange, timeframe, symbol, limit});
     }
     await Promise.all([
-        db.save({data, exchange: exchange.id, symbol, timeframe, onSave}),
-        db.del({exchange: exchange.id, symbol, timeframe, timestamp: oldestSince({timeframe, limit})}),
+        db.save({data, exchangeId: exchange.id, symbol, timeframe, onSave}),
+        db.del({exchangeId: exchange.id, symbol, timeframe, timestamp: oldestSince({timeframe})}),
         sleep(exchange.rateLimit)
     ]);
 
     continuousFeed && setTimeout(() =>
         feedQueue.push({exchange, timeframe, symbol, since: lastTime}), getNextTime({timeframe, since: lastTime})
-    )
+    );
+    return data;
 });
 
 
@@ -56,9 +57,24 @@ async function init({exchangeId}) {
             throw  `${exchangeId } does not have OHLCV data`
     } else
         throw   `Exchange not found  ${exchangeId}`;
-    debug('Feed initialized for ' + exchangeId);
+    debug('loading market for ' + exchangeId);
     await exchange.loadMarkets();
+    debug('market loaded for ' + exchangeId);
     return exchange;
+}
+
+async function feedAll({feedOptions, immediate}) {
+    const priority = immediate ? 'unshift' : 'push';
+
+    return Promise.map(_.compact(_.flattenDeep([feedOptions])), (feedOptions) => {
+        return new Promise((resolve, reject) =>
+            feedQueue[priority](feedOptions, (err, res) => {
+                // err && reject(err);
+                // !err && resolve(res)
+                err && debug(err)
+                err || resolve(res)
+            }))
+    }, {concurrency: 1});
 }
 
 async function start({exchange, limit, timeframe, symbol, continuousFeed = true, onSave}) {
@@ -85,48 +101,25 @@ async function start({exchange, limit, timeframe, symbol, continuousFeed = true,
             }
         });
     });
-
-    return Promise.map(_.compact(_.flatten(symbolFeedOptions)), (feedOptions) => {
-        return new Promise((resolve, reject) =>
-            feedQueue.push(feedOptions, (err, res) => {
-                // err && reject(err);
-                // !err && resolve(res)
-                err && debug(err)
-                resolve()
-            }))
-    }, {concurrency: 1});
+    return await feedAll({feedOptions: symbolFeedOptions});
 
 }
 
 
 function getFrame(timeframe) {
     let frame;
-    switch (timeframe) {
-        case '1m':
-        case '3m':
-        case '15m':
-        case '30m':
-            frame = 1000 * 60 * parseInt(timeframe)
-            break;
-        case '1h':
-        case '2h':
-        case '4h':
-        case '6h':
-        case '8h':
-        case '12h':
-            frame = 1000 * 60 * 60 * parseInt(timeframe)
-            break;
-        case '1d':
-        case '3d':
-            frame = 1000 * 60 * 60 * 24 * parseInt(timeframe)
-            break;
-        case '1w':
-            frame = 1000 * 60 * 60 * 24 * 7 * parseInt(timeframe)
-            break;
-        case '1M':
-            frame = 1000 * 60 * 60 * 24 * 31 * parseInt(timeframe)
-            break;
+    if (/m$/.test(timeframe)) {
+        frame = 1000 * 60 * parseInt(timeframe)
+    } else if (/h$/.test(timeframe)) {
+        frame = 1000 * 60 * 60 * parseInt(timeframe)
+    } else if (/d$/.test(timeframe)) {
+        frame = 1000 * 60 * 60 * 24 * parseInt(timeframe)
+    } else if (/w$/.test(timeframe)) {
+        frame = 1000 * 60 * 60 * 60 * 24 * 7 * parseInt(timeframe)
+    } else if (/M$/.test(timeframe)) {
+        frame = 1000 * 60 * 60 * 60 * 24 * 7 * 31 * parseInt(timeframe)
     }
+
     return frame;
 }
 
@@ -146,4 +139,27 @@ function oldestSince({timeframe, limit = 500}) {
 
 }
 
-module.exports = {start, init}
+
+const compatibleExchange = () => {
+    return ccxt.exchanges.map(ex => {
+        let x = new ccxt[ex]();
+        return {exchange: ex, fetchOHLCV: x.has.fetchOHLCV}
+    }).filter(ex => ex.fetchOHLCV).map(ex => ex.exchange).join(', ')
+}
+
+
+async function getLastCandle({exchange, symbol, timeframe, since}) {
+    return _.flattenDeep(await feedAll({
+        feedOptions: {
+            exchange,
+            timeframe,
+            symbol,
+            since,
+            limit: 1,
+        },
+        immediate: true
+    }))
+}
+
+
+module.exports = {start, init, compatibleExchange, sleep, getNextTime, getLastCandle}

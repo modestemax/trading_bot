@@ -3,7 +3,7 @@ const Bluebird = require('bluebird');
 const Knex = require('knex');
 const async = require('async');
 
-const CNX_STRING = '/home/max/projects/trading_bot/database/mbot.sqlite';
+const CNX_STRING = `/home/max/projects/trading_bot/database/${process.env.EXCHANGE}${process.env.TIMEFRAME}.sqlite`;
 
 const knex = Knex({
     client: 'sqlite3',
@@ -13,28 +13,28 @@ const knex = Knex({
     }
 });
 
-const saveQueue = async.queue(async function ({data, exchange, symbol, timeframe}) {
+const saveQueue = async.queue(async function ({data, exchangeId, symbol, timeframe}) {
 // const saveQueue = async.queue(async ({data}, callback) => {
 //     debugger;
     const bacthCount = 100;
     let s_data = [].concat(data)
-    debug(`saving ${exchange}->${symbol}->${timeframe}`)
+    debug(`saving ${exchangeId}->${symbol}->${timeframe}`)
     while (s_data.length) {
         await knex('recent_data').insert(s_data.splice(0, bacthCount));
     }
-    debug(`saved ${exchange}->${symbol}->${timeframe}`);
+    debug(`saved ${exchangeId}->${symbol}->${timeframe}`);
 });
 
-const deleteQueue = async.queue(async function ({exchange, symbol, timeframe, timestamp}) {
+const deleteQueue = async.queue(async function ({exchangeId, symbol, timeframe, timestamp}) {
 // const saveQueue = async.queue(async ({data}, callback) => {
 //     debugger;
     let delQuery = knex('recent_data')
-        .where('exchange', exchange)
+        .where('exchange', exchangeId)
         .where('symbol', symbol)
         .where('timeframe', timeframe);
     timestamp && delQuery.where('timestamp', '<', timestamp)
     await delQuery.delete();
-    debug(`deleted ${exchange}->${symbol}->${timeframe}`);
+    debug(`deleted ${exchangeId}->${symbol}->${timeframe}`);
 });
 
 const loadPricesQueue = async.queue(async function ({exchangeId, symbol, timeframe, limit = 500}) {
@@ -66,20 +66,20 @@ const getLastTimestamp = async ({exchangeId, timeframe}) => {
     timeframe && (query = query.where('timeframe', timeframe));
     return query;
 };
-const save = async ({data, exchange, symbol, timeframe, onSave} = {}) => {
+const save = async ({data, exchangeId, symbol, timeframe, onSave} = {}) => {
     return new Promise((resolve, reject) => {
-        saveQueue.push({data, exchange, symbol, timeframe}, (err) => {
+        saveQueue.push({data, exchangeId, symbol, timeframe}, (err) => {
             resolve();
-            onSave && onSave(err, {data, exchange, symbol, timeframe})
+            onSave && onSave(err, {data, exchangeId, symbol, timeframe})
 
         })
     })
 
 };
 
-const del = async ({exchange, symbol, timeframe, timestamp} = {}) => {
+const del = async ({exchangeId, symbol, timeframe, timestamp} = {}) => {
     return new Promise((resolve, reject) => {
-        deleteQueue.push({exchange, symbol, timeframe, timestamp}, (err) => {
+        deleteQueue.push({exchangeId, symbol, timeframe, timestamp}, (err) => {
             resolve();
         })
     })

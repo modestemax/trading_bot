@@ -1,7 +1,7 @@
 module.exports = {
 
-    EMA_SHORT_PERIOD: 10,
-    EMA_LONG_PERIOD: 20,
+    EMA_SHORT_PERIOD: 5,
+    EMA_LONG_PERIOD: 10,
     TRENDING_UP: 1,
     TRENDING_DOWN: -1,
     ADX_OK: 25,

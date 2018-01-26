@@ -1,3 +1,8 @@
 const tme = require('./index');
 
-tme.check({chat: {id: 'xxxx'}}, [, 'binance', 5]);
+const exchange = process.env.EXCHANGE;
+const timeframe = process.env.TIMEFRAME;
+
+if (exchange && timeframe) {
+    tme.start({chat: {id: 'xxxx'}}, [, exchange, timeframe]);
+}

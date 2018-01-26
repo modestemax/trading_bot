@@ -1,5 +1,5 @@
 const {indicators} = require('./signal')
-const adx = require('./adx')
+// const adx = require('./adx')
 const {ADX_OK, BUY, SELL, EMA_SHORT_PERIOD, EMA_LONG_PERIOD} = require('../test/constants')
 
 
@@ -19,15 +19,20 @@ async function signal({prices}) {
 
     /** have the lines crossed? */
     let down_cross = ema_short.prior <= ema_long.current && ema_short.current > ema_long.current ;
-    let up_cross = (ema_long.prior <= ema_short.current && ema_long.current > ema_short.current ;
+    let up_cross = ema_long.prior <= ema_short.current && ema_long.current > ema_short.current ;
 
 
     if (down_cross) {
-        return BUY;
+        return "BUY";
     }
     if (up_cross) {
-        return SELL
+        return "SELL"
+    }
+    if(ema_short.current>ema_long.current){
+        return "trending up"
+    }else {
+        return "trening down"
     }
 }
 
-module.exports = EMA;
+module.exports = signal;
