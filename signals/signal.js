@@ -3,17 +3,18 @@ const trend = require('trend')
 const talib = Promise.promisifyAll(require('talib'))
 
 
-async function adx({period, close, low, high}) {
+async function adx({period, close_prices, low_prices, high_prices}) {
     const ret = await talib.executeAsync({
         name: "ADX",
         startIdx: 0,
-        endIdx: close.length - 1,
-        high, low, close,
+        endIdx: close_prices.length - 1,
+        high_prices, low_prices, close_prices,
         optInTimePeriod: period
     });
 
     return ret.result.outReal
 }
+
 async function rsi({period, close, low, high}) {
     const ret = await talib.executeAsync({
         name: "RSI",
@@ -56,4 +57,4 @@ async function isTrendingUp({prices}) {
 }
 
 
-module.exports = {indicators:{adx,rsi,ema,sma},tools:{isTrendingUp}};
+module.exports = {indicators: {adx, rsi, ema, sma}, tools: {isTrendingUp}};

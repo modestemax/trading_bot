@@ -1,6 +1,6 @@
 const _ = require('lodash');
-const feed = require('../feed/feed');
-const db = require('../database/db');
+const feed = require('../market/feed');
+const db = require('../database/index');
 
 const buyWhen = 5;//percent
 const traillingStopLoss = 2//percent
