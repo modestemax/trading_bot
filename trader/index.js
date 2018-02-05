@@ -1,5 +1,5 @@
 const _ = require('lodash');
-const feed = require('../market/feed');
+const feed = require('../candles_feed/market/feed');
 const db = require('../database/index');
 
 const buyWhen = 5;//percent

@@ -1,6 +1,6 @@
 const trader = require('./trader');
 
-const {feed} = market = require('./market');
+const {feed} = market = require('./candles_feed/market');
 const signal = require('./signals');
 const db = require('./database/index');
 

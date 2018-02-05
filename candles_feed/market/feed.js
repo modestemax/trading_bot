@@ -4,7 +4,7 @@ const Promise = require('bluebird');
 const _ = require('lodash');
 
 const db = require('../database');
-const {sleep} = require('../utils');
+const {sleep} = require('../../utils/index');
 const ONE_SECOND = 1000;
 
 
@@ -81,28 +81,22 @@ const fn = module.exports = {
 
 
     async start({exchange, timeframe, symbol, continuousFeed = true, onCandleFetched}) {
-        //await db.clearAll()
         debug('Starting Feed: ' + exchange.id)
-
 
         const feedOptions = Object.keys(exchange.markets).map(marketSymbol => {
             if (symbol && marketSymbol !== symbol) return;
 
             return Object.keys(exchange.timeframes).map(exchangeTimeframe => {
                 if (timeframe && exchangeTimeframe !== timeframe) return;
+                if (!/(m|h)$/.test(exchangeTimeframe)) return;
                 return {
-                    // exchange,
                     timeframe: exchangeTimeframe,
                     symbol: marketSymbol,
-                    // since,
-                    // limit,
-                    // continuousFeed,
                     onCandleFetched
                 }
             });
         });
         return await fn.feedAllSymbolsCandles({exchange, feedOptions, continuousFeed, onCandleFetched});
-
     },
 
     async feedAllSymbolsCandles({feedOptions, exchange, continuousFeed, onCandleFetched, limit = 500}) {
@@ -118,7 +112,6 @@ const fn = module.exports = {
 
                 debug('feed ' + feedOption.symbol + ' ' + candles.length + ' returned')
                 if (candles && candles.length) {
-                    // res.push(candles);
                     lastTime = candles[candles.length - 1].timestamp;
                 }
                 return candles;
@@ -161,22 +154,8 @@ const fn = module.exports = {
         debug('savind new candles for ' + symbol)
         db.save({data, exchangeId: exchange.id, symbol, timeframe, onCandlesSaved: onCandleFetched});
         // db.del({exchangeId: exchange.id, symbol, timeframe, timestamp: oldestSince({timeframe})});
-        await            sleep(exchange.rateLimit);
+        await  sleep(exchange.rateLimit);
 
         return data;
-    },
-
-
-    async getLastCandle({exchange, symbol, timeframe, since}) {
-        return _.flattenDeep(await fn.feedSymbolCandles({
-            exchange,
-            feedOptions: {
-                exchange,
-                timeframe,
-                symbol,
-                since,
-                limit: 1,
-            }
-        }));
     }
 }
