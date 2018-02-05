@@ -1,5 +1,5 @@
 const debug = require('debug')('app:Feed');
-
+const async = require('async');
 const Promise = require('bluebird');
 const _ = require('lodash');
 
@@ -13,7 +13,7 @@ const feed = async ({exchange, timeframe, symbol, since, limit} = {}) =>
         .map(d => ({
             exchange: exchange.id,
             symbol, timeframe,
-            timestamp: d[0],
+            timestamp: new Date(d[0]),
             open_price: d[1],
             high_price: d[2],
             low_price: d[3],
@@ -21,6 +21,19 @@ const feed = async ({exchange, timeframe, symbol, since, limit} = {}) =>
             volume: d[5],
         }));
 
+const fQueue = async.queue(async function (options) {
+    return await feed(options)
+})
+
+function feedQueue(options) {
+    return new Promise((resolve, reject) => {
+        fQueue.push(options, (err, candles) => {
+            err && reject(err);
+            err || resolve(candles)
+            candles && debug(candles.length + ' candles for ' + options.symbol)
+        })
+    })
+}
 
 function getFrame(timeframe) {
     let frame;
@@ -100,7 +113,7 @@ const fn = module.exports = {
             let error;
             try {
                 await promise;
-                debug('feeding ' + feedOption.symbol)
+                debug('start feeding ' + feedOption.symbol)
                 let candles = await fn.feedSymbolCandles({feedOption, exchange, onCandleFetched, limit});
 
                 debug('feed ' + feedOption.symbol + ' ' + candles.length + ' returned')
@@ -132,9 +145,9 @@ const fn = module.exports = {
         feedOption.since = since;
 
 
-        debug(`feeding ${exchangeId}->${ symbol}->${ timeframe}${since ? ' since ' + new Date(since) : ''}`)
+        debug(`queueing ${exchangeId}->${ symbol}->${ timeframe}${since ? ' since ' + new Date(since) : ''}`)
         const verifiedSince = verifySince({timeframe, since, limit});
-        let data = await feed({exchange, timeframe, symbol, since: verifiedSince, limit});
+        let data = await feedQueue({exchange, timeframe, symbol, since: verifiedSince, limit});
 
         debug(`Ok ${data.length} candles fed  ${exchange.id}->${symbol}->${timeframe}  since  ${new Date(verifiedSince)}`);
 
@@ -146,12 +159,10 @@ const fn = module.exports = {
             data = await feed({exchange, timeframe, symbol, limit});
         }
         debug('savind new candles for ' + symbol)
-        await  Promise.all([
-            db.save({data, exchangeId: exchange.id, symbol, timeframe, onCandlesSaved: onCandleFetched}),
-            db.del({exchangeId: exchange.id, symbol, timeframe, timestamp: oldestSince({timeframe})}),
-            sleep(exchange.rateLimit)
-        ]);
-        debug('saved new candles for ' + symbol)
+        db.save({data, exchangeId: exchange.id, symbol, timeframe, onCandlesSaved: onCandleFetched});
+        // db.del({exchangeId: exchange.id, symbol, timeframe, timestamp: oldestSince({timeframe})});
+        await            sleep(exchange.rateLimit);
+
         return data;
     },
 

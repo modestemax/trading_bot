@@ -48,7 +48,7 @@ async function onCandleFetched({data, exchangeId, symbol, timeframe}) {
 const start = async () => {
     try {
         const exchangeId = process.env.EXCHANGE || 'binance';
-        const timeframe = process.env.TIMEFRAME || '3m';
+        const timeframe = process.env.TIMEFRAME || '15m';
         const symbol = process.env.SYMBOL;
         // const symbol = process.env.SYMBOL||'BNB/BTC';
         const exchange = await market.init({exchangeId});

@@ -2,10 +2,20 @@ const debug = require('debug')('Database');
 const fs = require('fs');
 const path = require('path');
 const Knex = require('knex');
+const async = require('async');
 
 const DB_BASE_DIR = __dirname;
 const TEMPLATE_DB = path.join(DB_BASE_DIR, 'template.sqlite');
 const DATA_TABLE_NAME = 'candle';
+
+const saveQueue = async.queue(async function ({data, exchangeId, symbol, timeframe, knex, onCandlesSaved}) {
+    await knex.transaction(async function (trx) {
+        const chunkSize = 100;
+        await trx.batchInsert(DATA_TABLE_NAME, data, chunkSize);
+        onCandlesSaved && onCandlesSaved({data, exchangeId, symbol, timeframe});
+    })
+
+}, 100);
 
 const fn = module.exports = {
 
@@ -18,9 +28,8 @@ const fn = module.exports = {
     },
     async save({data, exchangeId, symbol, timeframe, onCandlesSaved} = {}) {
         const knex = await getKnex({exchangeId, symbol, timeframe});
-        const chunkSize = 100;
-        await knex.batchInsert(DATA_TABLE_NAME, data, chunkSize);
-        onCandlesSaved && onCandlesSaved({data, exchangeId, symbol, timeframe});
+
+        saveQueue.push({data, knex, exchangeId, symbol, timeframe, onCandlesSaved})
     },
 
     async del({exchangeId, symbol, timeframe, timestamp} = {}) {
@@ -43,6 +52,7 @@ const fn = module.exports = {
 };
 
 const dbExist = {};
+let pg;
 
 async function getKnex({exchangeId, symbol, timeframe}) {
     switch (process.env.DB_DRIVER) {
@@ -60,11 +70,11 @@ async function getKnex({exchangeId, symbol, timeframe}) {
                 connection: {filename}
             });
         default:
-            return Knex({
+            return pg || (pg = Knex({
                 client: 'pg',
-                pool: {min: 0, max: 300},
+                pool: {min: 100, max: 100},
                 connection: process.env.PG_CONNECTION_STRING || 'postgresql://postgres:ameen*3n@localhost:5432/trading_bot',
                 searchPath: [exchangeId, 'public'],
-            })
+            }))
     }
 }
