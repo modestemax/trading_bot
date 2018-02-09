@@ -4,6 +4,7 @@
   "description": "crypto bot",
   "main": "index.js",
   "dependencies": {
+    "array-difference": "0.0.1",
     "async": "^2.6.0",
     "binance": "^1.2.2",
     "bluebird": "^3.5.1",
@@ -15,7 +16,9 @@
     "moving-averages": "^4.0.5",
     "node-telegram-bot-api": "^0.30.0",
     "pg": "^7.4.1",
+    "pg-hstore": "^2.3.2",
     "postgres-js": "^0.1.0",
+    "sequelize": "^4.33.1",
     "sqlite3": "^3.1.13",
     "technicalindicators": "^1.0.21",
     "trend": "^0.3.0",

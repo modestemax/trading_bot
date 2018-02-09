@@ -2,7 +2,6 @@ const debug = require('debug')('app:Feed');
 const async = require('async');
 const Promise = require('bluebird');
 const _ = require('lodash');
-
 const db = require('../database');
 const {sleep} = require('../../utils/index');
 const ONE_SECOND = 1000;
@@ -30,7 +29,7 @@ function feedQueue(options) {
         fQueue.push(options, (err, candles) => {
             err && reject(err);
             err || resolve(candles)
-            candles && debug(candles.length + ' candles for ' + options.symbol)
+            candles && debug(`${candles.length} candles for ${options.symbol} ${options.timeframe}`)
         })
     })
 }
@@ -80,37 +79,34 @@ const fn = module.exports = {
     },
 
 
-    async start({exchange, timeframe, symbol, continuousFeed = true, onCandleFetched}) {
+    async start({exchange, timeframes, symbols, continuousFeed = true, onCandleFetched}) {
         debug('Starting Feed: ' + exchange.id)
 
-        const feedOptions = Object.keys(exchange.markets).map(marketSymbol => {
-            if (symbol && marketSymbol !== symbol) return;
+        let feedOptions = Object.values(exchange.markets).map(market => {
+            if (!symbols.includes(market.base)) return;
 
-            return Object.keys(exchange.timeframes).map(exchangeTimeframe => {
-                if (timeframe && exchangeTimeframe !== timeframe) return;
-                if (!/(m|h)$/.test(exchangeTimeframe)) return;
-                return {
-                    timeframe: exchangeTimeframe,
-                    symbol: marketSymbol,
-                    onCandleFetched
-                }
+            return Object.keys(exchange.timeframes).map(timeframe => {
+                if (timeframes && !timeframes.includes(timeframe)) return;
+                if (!/(m|h)$/.test(timeframe)) return;
+
+                return {timeframe, symbol: market.symbol, onCandleFetched}
             });
         });
+        feedOptions = _.compact(_.flattenDeep([feedOptions]));
         return await fn.feedAllSymbolsCandles({exchange, feedOptions, continuousFeed, onCandleFetched});
     },
 
+
     async feedAllSymbolsCandles({feedOptions, exchange, continuousFeed, onCandleFetched, limit = 500}) {
 
-        let allFeedOptions = _.compact(_.flattenDeep([feedOptions]));
+
         let lastTime;
-        return allFeedOptions.reduce(async (promise, feedOption) => {
+        return feedOptions.reduce(async (promise, feedOption) => {
             let error;
             try {
                 await promise;
-                debug('start feeding ' + feedOption.symbol)
                 let candles = await fn.feedSymbolCandles({feedOption, exchange, onCandleFetched, limit});
 
-                debug('feed ' + feedOption.symbol + ' ' + candles.length + ' returned')
                 if (candles && candles.length) {
                     lastTime = candles[candles.length - 1].timestamp;
                 }
@@ -133,24 +129,24 @@ const fn = module.exports = {
     async feedSymbolCandles({feedOption, exchange, limit = 500, onCandleFetched}) {
         const {symbol, timeframe} = feedOption;
         const exchangeId = exchange.id;
+
         const lastCandle = await     db.getLastTimestamp({exchangeId, symbol, timeframe});
         const since = +(lastCandle && lastCandle.timestamp) + 1;
         feedOption.since = since;
-
 
         debug(`queueing ${exchangeId}->${ symbol}->${ timeframe}${since ? ' since ' + new Date(since) : ''}`)
         const verifiedSince = verifySince({timeframe, since, limit});
         let data = await feedQueue({exchange, timeframe, symbol, since: verifiedSince, limit});
 
-        debug(`Ok ${data.length} candles fed  ${exchange.id}->${symbol}->${timeframe}  since  ${new Date(verifiedSince)}`);
+        debug(`Ok ${data.length} candles fed (${timeframe})  ${exchange.id}->${symbol}->${timeframe}  since  ${new Date(verifiedSince)}`);
 
         let lastTime = data.length && data[data.length - 1].timestamp;
-        if (lastTime && new Date() - lastTime > getFrame(timeframe)) {
-            debugger;
-            debug('bad data');
-            await db.del({exchangeId, symbol, timeframe});
-            data = await feed({exchange, timeframe, symbol, limit});
-        }
+        // if (lastTime && new Date() - lastTime > getFrame(timeframe)) {
+        //     debugger;
+        //     debug('bad data');
+        //     await db.del({exchangeId, symbol, timeframe});
+        //     data = await feed({exchange, timeframe, symbol, limit});
+        // }
         debug('savind new candles for ' + symbol)
         db.save({data, exchangeId: exchange.id, symbol, timeframe, onCandlesSaved: onCandleFetched});
         // db.del({exchangeId: exchange.id, symbol, timeframe, timestamp: oldestSince({timeframe})});

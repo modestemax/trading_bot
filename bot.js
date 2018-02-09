@@ -2,7 +2,7 @@ const trader = require('./trader');
 
 const {feed} = market = require('./candles_feed/market');
 const signal = require('./signals');
-const db = require('./database/index');
+// const db = require('./database/index');
 
 let pumpings = {};
 
@@ -47,11 +47,12 @@ async function onCandleFetched({data, exchangeId, symbol, timeframe}) {
 
 const start = async () => {
     try {
-        const exchangeId = process.env.EXCHANGE || 'binance';
+        // const exchangeId = process.env.EXCHANGE || 'binance';
+        const exchangeId =  'coinmarketcap';
         const timeframe = process.env.TIMEFRAME || '15m';
         const symbol = process.env.SYMBOL;
         // const symbol = process.env.SYMBOL||'BNB/BTC';
-        const exchange = await market.init({exchangeId});
+        const exchange = await market.init({exchangeId,coinmarketcap:true});
 
         await feed.start({exchange, timeframe, symbol})
         // await feed.start({exchange, timeframe, symbol, onCandleFetched})

@@ -3,11 +3,11 @@ const ccxt = require('ccxt');
 
 module.exports = {
     feed: require('./feed'),
-    async init({exchangeId}) {
+    async init({exchangeId, coinmarketcap}) {
         let exchange;
         if (exchangeId in ccxt) {
             exchange = new ccxt[exchangeId]();
-            if (!exchange.hasFetchOHLCV)
+            if (!exchange.hasFetchOHLCV && !coinmarketcap)
                 throw  `${exchangeId } does not have OHLCV data`
         } else
             throw   `Exchange not found  ${exchangeId}`;

@@ -1,6 +1,6 @@
 const _ = require('lodash');
 const feed = require('../candles_feed/market/feed');
-const db = require('../database/index');
+// const db = require('../database/index');
 
 const buyWhen = 5;//percent
 const traillingStopLoss = 2//percent
